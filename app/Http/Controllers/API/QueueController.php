@@ -148,24 +148,35 @@ class QueueController extends Controller
     public function updateStatus(Request $request) {
         $queue = $this->queueRepository->findById($request->queue_id);
         if (!empty($queue)) {
-            if ($this->queueRepository->updateStatus($queue, $request->status)) {
-                if ($request->status == 'active') {
-                    $this->queueRepository->updateStartTime($queue);
-                    $this->sendNotification(auth()->user()->firebase_token, "Notifikasi Pelayanan", "Pelayanan sedang dimulai.");
-                } elseif ($request->status == 'finish') {
-                    $this->queueRepository->updateFinishTime($queue);
-                    $this->sendNotification(auth()->user()->firebase_token, "Notifikasi Pelayanan", "Pelayanan selesai, semoga anda puas dengan pelayanan yang kami berikan.");
-                }
+            if ($this->isValidMerchant($queue->service->merchant_id)) {
+                if ($this->queueRepository->updateStatus($queue, $request->status)) {
+                    $merchantName = $queue->service->merchant->name;
+                    $serviceName = $queue->service->name;
+                    $token = $queue->user->firebase_token;
+                    if ($request->status == 'active') {
+                        $this->queueRepository->updateStartTime($queue);
+                        $this->sendNotification($token, "Notifikasi Pelayanan", "Pelayanan $serviceName di $merchantName sedang dimulai.");
+                    } elseif ($request->status == 'finish') {
+                        $this->queueRepository->updateFinishTime($queue);
+                        $this->sendNotification($token, "Notifikasi Pelayanan", "Pelayanan $serviceName di $merchantName selesai, semoga anda puas dengan pelayanan yang kami berikan.");
+                    }
 
-                return response()->json([
-                    'error' => false,
-                    'message' => 'Success, queue status updated!',
-                    'data' => $queue
-                ]);
+                    return response()->json([
+                        'error' => false,
+                        'message' => 'Success, queue status updated!',
+                        'data' => $queue
+                    ]);
+                } else {
+                    return response()->json([
+                        'error' => true,
+                        'message' => 'Failed, unable to update queue status!',
+                        'data' => $queue
+                    ]);
+                }
             } else {
                 return response()->json([
                     'error' => true,
-                    'message' => 'Failed, unable to update queue status!',
+                    'message' => 'Failed, unauthorized action!',
                     'data' => $queue
                 ]);
             }
@@ -182,7 +193,7 @@ class QueueController extends Controller
         $queue = $this->queueRepository->findById($request->id);
         $service = $this->serviceRepository->findById($queue->service_id);
         if ($queue != null) {
-            if ($service->merchant_id == auth()->user()->merchant->id) {
+            if ($this->isValidMerchant($service->merchant_id)) {
                 if ($queue->schedule != Carbon::now()->toDateString()) {
                     return response()->json([
                         'error' => true,
@@ -209,6 +220,14 @@ class QueueController extends Controller
                 'message' => 'Gagal, antrean tidak ditemukan!',
                 'data' => null
             ]);
+        }
+    }
+
+    public function isValidMerchant($id) {
+        if ($id != auth()->user()->merchant->id) {
+            return false;
+        } else {
+            return true;
         }
     }
 

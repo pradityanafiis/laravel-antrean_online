@@ -105,9 +105,14 @@ class QueueRepository
 
     public function findById($id) {
         return $this->queue
-            ->with(['service', 'user' => function ($query) {
-                $query->select(['id', 'name', 'identity_number']);
-            }])
-            ->find($id);
+            ->with([
+                'service',
+                'service.merchant' => function ($query) {
+                    $query->select(['id', 'name']);
+                },
+                'user' => function ($query) {
+                    $query->select(['id', 'name', 'identity_number', 'firebase_token']);
+                }
+            ])->find($id);
     }
 }
