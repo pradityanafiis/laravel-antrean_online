@@ -148,35 +148,28 @@ class QueueController extends Controller
     public function updateStatus(Request $request) {
         $queue = $this->queueRepository->findById($request->queue_id);
         if (!empty($queue)) {
-            if ($this->isValidMerchant($queue->service->merchant_id)) {
-                if ($this->queueRepository->updateStatus($queue, $request->status)) {
-                    $merchantName = $queue->service->merchant->name;
-                    $serviceName = $queue->service->name;
-                    $token = $queue->user->firebase_token;
-                    if ($request->status == 'active') {
-                        $this->queueRepository->updateStartTime($queue);
-                        $this->sendNotification($token, "Notifikasi Pelayanan", "Pelayanan $serviceName di $merchantName sedang dimulai.");
-                    } elseif ($request->status == 'finish') {
-                        $this->queueRepository->updateFinishTime($queue);
-                        $this->sendNotification($token, "Notifikasi Pelayanan", "Pelayanan $serviceName di $merchantName selesai, semoga anda puas dengan pelayanan yang kami berikan.");
-                    }
+            if ($this->queueRepository->updateStatus($queue, $request->status)) {
+                $merchantName = $queue->service->merchant->name;
+                $serviceName = $queue->service->name;
+                $token = $queue->user->firebase_token;
 
-                    return response()->json([
-                        'error' => false,
-                        'message' => 'Success, queue status updated!',
-                        'data' => $queue
-                    ]);
-                } else {
-                    return response()->json([
-                        'error' => true,
-                        'message' => 'Failed, unable to update queue status!',
-                        'data' => $queue
-                    ]);
+                if ($request->status == 'active') {
+                    $this->queueRepository->updateStartTime($queue);
+                    $this->sendNotification($token, "Notifikasi Pelayanan", "Pelayanan $serviceName di $merchantName sedang dimulai.");
+                } elseif ($request->status == 'finish') {
+                    $this->queueRepository->updateFinishTime($queue);
+                    $this->sendNotification($token, "Notifikasi Pelayanan", "Pelayanan $serviceName di $merchantName selesai, semoga anda puas dengan pelayanan yang kami berikan.");
                 }
+
+                return response()->json([
+                    'error' => false,
+                    'message' => 'Success, queue status updated!',
+                    'data' => $queue
+                ]);
             } else {
                 return response()->json([
                     'error' => true,
-                    'message' => 'Failed, unauthorized action!',
+                    'message' => 'Failed, unable to update queue status!',
                     'data' => $queue
                 ]);
             }
