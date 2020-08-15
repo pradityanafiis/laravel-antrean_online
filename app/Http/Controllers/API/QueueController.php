@@ -8,6 +8,7 @@ use App\Http\Repositories\QueueRepository;
 use App\Http\Repositories\ServiceRepository;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 
 class QueueController extends Controller
 {
@@ -148,10 +149,13 @@ class QueueController extends Controller
         $queue = $this->queueRepository->findById($request->queue_id);
         if (!empty($queue)) {
             if ($this->queueRepository->updateStatus($queue, $request->status)) {
-                if ($request->status == 'active')
+                if ($request->status == 'active') {
                     $this->queueRepository->updateStartTime($queue);
-                elseif ($request->status == 'finish')
+                    $this->sendNotification(auth()->user()->firebase_token, "Notifikasi Pelayanan", "Pelayanan sedang dimulai.");
+                } elseif ($request->status == 'finish') {
                     $this->queueRepository->updateFinishTime($queue);
+                    $this->sendNotification(auth()->user()->firebase_token, "Notifikasi Pelayanan", "Pelayanan selesai, semoga anda puas dengan pelayanan yang kami berikan.");
+                }
 
                 return response()->json([
                     'error' => false,
@@ -177,7 +181,6 @@ class QueueController extends Controller
     public function findByQRCode(Request $request) {
         $queue = $this->queueRepository->findById($request->id);
         $service = $this->serviceRepository->findById($queue->service_id);
-        $merchant = $this->merchantRepository->findById($service->merchant_id);
         if ($queue != null) {
             if ($service->merchant_id == auth()->user()->merchant->id) {
                 if ($queue->schedule != Carbon::now()->toDateString()) {
@@ -207,5 +210,16 @@ class QueueController extends Controller
                 'data' => null
             ]);
         }
+    }
+
+    public function sendNotification($to, $title, $body) {
+        return Http::asJson()->withToken('AAAAYHljUqM:APA91bGtyyK8yynvt6pyKqWKDnDBeIHB1KMZUao2fr7Xm_yIViGEK3I7iC9hu_p4A7RUJoJNZhvXLLMnDRsEjneQPuX9P3469O2P3SwnJiKuvod250a1BzfXwrocJhSwV_ftYXjnZbiB')
+            ->post('https://fcm.googleapis.com/fcm/send', [
+                'to' => $to,
+                'notification' => [
+                    'title' => $title,
+                    'body' => $body
+                ]
+            ]);
     }
 }

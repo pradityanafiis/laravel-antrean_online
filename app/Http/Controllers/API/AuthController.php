@@ -61,6 +61,7 @@ class AuthController extends Controller
         $user = $this->userRepository->findByEmail($request->email);
         if ($user) {
             if (Hash::check($request->password, $user->password)) {
+                $this->userRepository->setFirebaseToken($request->email, $request->firebase_token);
                 $token = $user->createToken('antrean-online-token')->plainTextToken;
                 $user->setAttribute('token', $token);
                 $user->setAttribute('has_merchant', $user->merchant()->exists());

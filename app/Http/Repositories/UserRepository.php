@@ -45,6 +45,13 @@ class UserRepository
         ]);
     }
 
+    public function setFirebaseToken($email, $token)
+    {
+        return $this->findByEmail($email)->update([
+            'firebase_token' => $token
+        ]);
+    }
+
     public function findByEmail($email)
     {
         return User::where('email', $email)->first();
