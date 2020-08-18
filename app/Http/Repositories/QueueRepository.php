@@ -15,14 +15,24 @@ class QueueRepository
         $this->queue = new Queue();
     }
 
-    public function findByDate($serviceId, $date)
+    public function countByDate($serviceId, $date)
     {
         return $this->queue
             ->where('service_id', $serviceId)
             ->whereDate('schedule', $date)
-            ->whereNotIn('status', ['expired', 'canceled'])
+            ->whereIn('status', ['waiting', 'active'])
             ->count();
     }
+
+//    public function findLastQueue($serviceId, $date)
+//    {
+//        return $this->queue
+//            ->where('service_id', $serviceId)
+//            ->whereDate('schedule', $date)
+//            ->whereNotIn('status', ['expired', 'canceled'])
+//            ->latest()
+//            ->first();
+//    }
 
     public function store(Request $request)
     {

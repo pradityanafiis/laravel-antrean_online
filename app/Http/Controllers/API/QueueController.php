@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Http\Repositories\BusinessHourRepository;
 use App\Http\Repositories\MerchantRepository;
 use App\Http\Repositories\QueueRepository;
 use App\Http\Repositories\ServiceRepository;
+use App\Service;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -15,26 +17,91 @@ class QueueController extends Controller
     private ServiceRepository $serviceRepository;
     private QueueRepository $queueRepository;
     private MerchantRepository $merchantRepository;
+    private BusinessHourRepository $businessHourRepository;
+    private $currentTime;
 
     public function __construct()
     {
         $this->serviceRepository = new ServiceRepository();
         $this->queueRepository = new QueueRepository();
         $this->merchantRepository = new MerchantRepository();
+        $this->businessHourRepository = new BusinessHourRepository();
+        $this->currentTime = Carbon::now();
     }
 
-    public function findByDate(Request $request) {
-        return response()->json([
-            'error' => false,
-            'message' => 'Success, queue number retrieved.',
-            'data' => $this->queueRepository->findByDate($request->service_id, $request->date)
-        ]);
+    public function isAlreadyOpen($openTime)
+    {
+        if ($this->currentTime->greaterThanOrEqualTo($openTime))
+            return true;
+        else
+            return false;
+    }
+
+    public function getQueueNumber($serviceId, $date)
+    {
+        return $this->queueRepository->countByDate($serviceId, $date);
+    }
+
+    public function isQueueAvailable($serviceId, $date) {
+        $serviceQuota = $this->serviceRepository->findQuotaById($serviceId);
+        if ($this->queueRepository->countByDate($serviceId, $date) < $serviceQuota['quota'])
+            return true;
+        else
+            return false;
+    }
+
+    public function calculateEstimatedTimeServe($serviceId, $date)
+    {
+        $service = $this->serviceRepository->findById($serviceId);
+        $queueNumber = $this->getQueueNumber($service->id, $date);
+        $selectedDate = Carbon::createFromFormat('Y-m-d', $date);
+        $selectedDay = $selectedDate->englishDayOfWeek;
+        $openTime = Carbon::createFromFormat('H:i:s', $this->businessHourRepository->findByDay($service->merchant_id, $selectedDay)->open_time);
+        if ($selectedDate->isToday() && $this->isAlreadyOpen($openTime)) {
+            if ($queueNumber == 0) {
+                return $this->currentTime->format('H:i');
+            } else {
+                $lastQueue = Carbon::createFromFormat('H:i:s', $this->queueRepository->findLastQueue($service->id, $date)->estimated_time_serve);
+                return $lastQueue->addMinute($service->interval)->format('H:i');
+            }
+        } else {
+            return $openTime->addMinute($queueNumber * $service->interval)->format('H:i');
+        }
+    }
+
+    public function findByDate(Request $request)
+    {
+        $serviceId = $request->service_id;
+        $selectedDate = $request->date;
+        if ($this->isQueueAvailable($serviceId, $selectedDate)) {
+            return response()->json([
+                'error' => false,
+                'message' => 'Success, queue detail retrieved!',
+                'data' => [
+                    'queue_number' => $this->getQueueNumber($serviceId, $selectedDate),
+                    'estimated_time_serve' => $this->calculateEstimatedTimeServe($serviceId, $selectedDate)
+                ]
+            ]);
+        } else {
+            return response()->json([
+                'error' => true,
+                'message' => 'Failed, queue schedule is full!',
+                'data' => [
+                    'queue_number' => $this->getQueueNumber($serviceId, $selectedDate)
+                ]
+            ]);
+        }
     }
 
     public function store(Request $request) {
-        if ($this->isQueueAvailable($request->service_id, $request->schedule)) {
-            $queueNumber = $this->queueRepository->findByDate($request->service_id, $request->schedule);
-            $request->request->add(['queue_number' => ++$queueNumber]);
+        $serviceId = $request->service_id;
+        $selectedDate = $request->schedule;
+        if ($this->isQueueAvailable($serviceId, $selectedDate)) {
+            $queueNumber = $this->getQueueNumber($serviceId, $selectedDate);
+            $request->request->add([
+                'estimated_time_serve' => $this->calculateEstimatedTimeServe($serviceId, $selectedDate),
+                'queue_number' => ++$queueNumber
+            ]);
             return response()->json([
                 'error' => false,
                 'message' => 'Success, queue created!',
@@ -47,14 +114,6 @@ class QueueController extends Controller
                 'data' => null
             ]);
         }
-    }
-
-    public function isQueueAvailable($serviceId, $date) {
-        $serviceQuota = $this->serviceRepository->findQuotaById($serviceId);
-        if ($this->queueRepository->findByDate($serviceId, $date) < $serviceQuota['quota'])
-            return true;
-        else
-            return false;
     }
 
     public function findActiveByUser() {

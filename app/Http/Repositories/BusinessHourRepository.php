@@ -22,6 +22,16 @@ class BusinessHourRepository
         ]);
     }
 
+    public function findByDay($merchantId, $day)
+    {
+        return $this->businessHour
+            ->where([
+                ['merchant_id', $merchantId],
+                ['day_of_week', $day]
+            ])
+            ->first();
+    }
+
     public function destroy() {
         return $this->businessHour->where('merchant_id', auth()->user()->merchant->id)->delete();
     }
